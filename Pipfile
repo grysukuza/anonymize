@@ -9,6 +9,7 @@ pydantic = "*"
 instructor = "*"
 presidio-anonymizer = "*"
 presidio-analyzer = "*"
+flask = "*"
 
 [dev-packages]
 

@@ -1,0 +1,10 @@
+setup.py
+anonymize_data/__init__.py
+anonymize_data/__main__.py
+anonymize_data/core.py
+anonymize_data.egg-info/PKG-INFO
+anonymize_data.egg-info/SOURCES.txt
+anonymize_data.egg-info/dependency_links.txt
+anonymize_data.egg-info/entry_points.txt
+anonymize_data.egg-info/requires.txt
+anonymize_data.egg-info/top_level.txt

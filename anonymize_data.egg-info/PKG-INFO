@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: anonymize_data
+Version: 0.1.0
+Provides-Extra: anonymization
+Requires-Dist: presidio-analyzer; extra == "anonymization"
+Requires-Dist: presidio-anonymizer; extra == "anonymization"
+Dynamic: provides-extra

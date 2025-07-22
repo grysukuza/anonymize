@@ -1,0 +1,4 @@
+
+[anonymization]
+presidio-analyzer
+presidio-anonymizer
