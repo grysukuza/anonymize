@@ -15,9 +15,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Copy application code
 COPY app.py .
+COPY templates/ ./templates/
 
 # Expose port
-EXPOSE 8001
+EXPOSE 5000
 
 # Run the Gunicorn server
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8001", "app:app"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "app:app"]

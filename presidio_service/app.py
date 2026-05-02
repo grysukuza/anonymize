@@ -1,7 +1,7 @@
 """
 Flask application for the Presidio anonymization microservice.
 """
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine, OperatorConfig
 
@@ -10,6 +10,11 @@ app = Flask(__name__)
 # Initialize Presidio engines once at startup
 analyzer = AnalyzerEngine()
 anonymizer = AnonymizerEngine()
+
+@app.get("/")
+def index():
+    """Serve the web UI for text anonymization."""
+    return render_template("index.html")
 
 @app.get("/health")
 def health():
@@ -49,4 +54,4 @@ def anonymize():
 
 if __name__ == "__main__":
     # For local development/testing only; use Gunicorn in production
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=5000)

@@ -23,13 +23,17 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd presidio_service && python app.py"
-waitForPort = 8000
+waitForPort = 5000
 
-[workflows.workflow.metadata]
-outputType = "console"
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [[ports]]
 localPort = 8000
@@ -37,5 +41,5 @@ externalPort = 8000
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd presidio_service && gunicorn --bind=0.0.0.0:8000 --reuse-port -w 2 app:app"]
+run = ["bash", "-c", "cd presidio_service && gunicorn --bind=0.0.0.0:5000 --reuse-port -w 2 --timeout 120 app:app"]
 build = ["bash", "-c", "pip install -r presidio_service/requirements.txt && python -m spacy download en_core_web_lg"]

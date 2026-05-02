@@ -27,8 +27,13 @@ python app.py
 
 In production (with Gunicorn):
 ```bash
-gunicorn -w 2 -b 0.0.0.0:8001 app:app
+gunicorn -w 2 -b 0.0.0.0:5000 app:app
 ```
+
+## Web UI
+
+Open `http://localhost:5000/` in a browser to use the interactive web interface
+for anonymizing text.
 
 ## API
 
@@ -58,13 +63,14 @@ Response JSON:
 ```python
 import requests
 
-def anonymize_via_api(text: str, url: str = "http://localhost:8001/anonymize") -> str:
+def anonymize_via_api(text: str, url: str = "http://localhost:5000/anonymize") -> str:
     response = requests.post(url, json={"text": text}, timeout=5)
     response.raise_for_status()
     return response.json().get("text", "")
 
 clean_text = anonymize_via_api("John Doe visited the clinic.")
 print(clean_text)
+```
 
 ## Docker
 
@@ -76,6 +82,5 @@ docker build -t presidio-service .
 
 ### Run Container
 ```bash
-docker run -p 8001:8001 presidio-service
-```
+docker run -p 5000:5000 presidio-service
 ```
