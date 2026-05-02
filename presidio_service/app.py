@@ -49,4 +49,4 @@ def anonymize():
 
 if __name__ == "__main__":
     # For local development/testing only; use Gunicorn in production
-    app.run(host="0.0.0.0", port=8001)
+    app.run(host="0.0.0.0", port=8000)
