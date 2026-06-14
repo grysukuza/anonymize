@@ -239,6 +239,21 @@
       <p class="subtitle">Detect and replace personally identifiable information using Microsoft Presidio</p>
     </header>
 
+
+
+    <div class="panel" style="margin-bottom: 16px;">
+      <div class="panel-header">
+        <span class="panel-title">Login</span>
+        <span class="badge" id="authBadge">signed out</span>
+      </div>
+      <div class="controls" style="justify-content: flex-start; margin: 0;">
+        <input id="username" placeholder="Username" value="admin" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);" />
+        <input id="password" type="password" placeholder="Password" value="anonymize123" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);" />
+        <button id="loginBtn" class="secondary">Login</button>
+        <button id="logoutBtn" class="secondary" disabled>Logout</button>
+      </div>
+    </div>
+
     <div class="examples">
       <span style="font-size: 0.8rem; color: var(--muted); align-self: center;">Try an example:</span>
       <button class="example-chip" data-example="medical">Medical record</button>
@@ -262,6 +277,18 @@
         </div>
         <pre class="output placeholder" id="output">The anonymized result will appear here.</pre>
       </div>
+    </div>
+
+
+    <div class="panel" style="margin-top: 16px;">
+      <div class="panel-header">
+        <span class="panel-title">Options</span>
+      </div>
+      <label><input type="checkbox" id="adjustData"> Adjust data markers</label><br/>
+      <label><input type="checkbox" id="adjustNumbers"> Adjust numbers</label>
+      <input id="numberDelta" type="number" value="1" style="width:80px;margin-left:8px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);" />
+      <br/>
+      <label><input type="checkbox" id="removeUnusualWords"> Take out unusual words</label>
     </div>
 
     <div class="controls">
@@ -288,6 +315,15 @@
     const status = document.getElementById("status");
     const charCount = document.getElementById("charCount");
     const outputBadge = document.getElementById("outputBadge");
+    const authBadge = document.getElementById("authBadge");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const username = document.getElementById("username");
+    const password = document.getElementById("password");
+    const adjustData = document.getElementById("adjustData");
+    const adjustNumbers = document.getElementById("adjustNumbers");
+    const numberDelta = document.getElementById("numberDelta");
+    const removeUnusualWords = document.getElementById("removeUnusualWords");
 
     const EXAMPLES = {
       medical: "Patient John Smith, born on 01/02/1980, was admitted to St. Mary's Hospital on 03/15/2024. His SSN is 123-45-6789 and medical record number is MRN789012. He can be reached at john.smith@example.com or 555-123-4567.",
@@ -299,6 +335,7 @@
       chip.addEventListener("click", () => {
         input.value = EXAMPLES[chip.dataset.example] || "";
         updateCount();
+    refreshSession();
         input.focus();
       });
     });
@@ -319,6 +356,33 @@
 
     input.addEventListener("input", updateCount);
 
+    async function refreshSession() {
+      const res = await fetch("/session");
+      const data = await res.json();
+      const loggedIn = !!data.authenticated;
+      authBadge.textContent = loggedIn ? `signed in as ${data.username}` : "signed out";
+      loginBtn.disabled = loggedIn;
+      logoutBtn.disabled = !loggedIn;
+      anonymizeBtn.disabled = !loggedIn;
+    }
+
+    loginBtn.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/login", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username: username.value, password: password.value})});
+        if (!res.ok) throw new Error("Login failed");
+        setStatus("Logged in.", "success");
+        await refreshSession();
+      } catch (e) {
+        setStatus(e.message, "error");
+      }
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      await fetch("/logout", {method:"POST"});
+      setStatus("Logged out.", "success");
+      await refreshSession();
+    });
+
     clearBtn.addEventListener("click", () => {
       input.value = "";
       setOutput("The anonymized result will appear here.", true);
@@ -326,6 +390,7 @@
       copyBtn.disabled = true;
       setStatus("");
       updateCount();
+    refreshSession();
       input.focus();
     });
 
@@ -354,7 +419,7 @@
         const res = await fetch("/anonymize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({ text, adjust_data: adjustData.checked, adjust_numbers: adjustNumbers.checked, number_delta: Number(numberDelta.value || 0), remove_unusual_words: removeUnusualWords.checked })
         });
 
         if (!res.ok) {
@@ -384,6 +449,7 @@
     });
 
     updateCount();
+    refreshSession();
   </script>
 </body>
 </html>
