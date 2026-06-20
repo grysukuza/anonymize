@@ -58,6 +58,41 @@ Response JSON:
 { "text": "<PII>" }
 ```
 
+### OpenMed-style PII Endpoints
+
+These endpoints mirror the API surface of
+[`maziyarpanahi/openmed`](https://github.com/maziyarpanahi/openmed),
+backed here by Presidio. Both require an authenticated session (`POST /login`).
+
+#### Extract PII
+POST /pii/extract
+
+Request JSON:
+```json
+{ "text": "Patient John Smith, SSN 126-48-6789", "lang": "en" }
+```
+
+Response JSON:
+```json
+{ "entities": [
+  { "label": "PERSON", "text": "John Smith", "start": 8, "end": 18, "score": 0.85 },
+  { "label": "US_SSN", "text": "126-48-6789", "start": 24, "end": 35, "score": 0.85 }
+] }
+```
+
+#### De-identify
+POST /pii/deidentify
+
+Request JSON (`method` is one of `mask`, `replace`, `hash`, `shift_dates`):
+```json
+{ "text": "John Smith born 01/02/1980", "method": "shift_dates", "date_shift_days": 180 }
+```
+
+Response JSON:
+```json
+{ "text": "[PERSON] born 06/30/1980", "method": "shift_dates" }
+```
+
 ## Client Example
 
 ```python

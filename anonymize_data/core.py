@@ -109,6 +109,13 @@ def _register_custom_recognizers(analyzer: AnalyzerEngine) -> None:
         analyzer.registry.add_recognizer(recognizer)
 
 
+def build_analyzer() -> AnalyzerEngine:
+    """Build an AnalyzerEngine with the project's custom medical recognizers registered."""
+    analyzer = AnalyzerEngine()
+    _register_custom_recognizers(analyzer)
+    return analyzer
+
+
 def anonymize_medical_text(text: str, *, patient_scope_seed: str = "default") -> str:
     """
     Apply layered anonymization strategies aligned with HIPAA safe-harbor goals.
@@ -118,9 +125,8 @@ def anonymize_medical_text(text: str, *, patient_scope_seed: str = "default") ->
     2. Deterministic date shifting (small data distortion preserving sequence utility).
     3. Rare disease redaction for quasi-identifier suppression.
     """
-    analyzer = AnalyzerEngine()
+    analyzer = build_analyzer()
     anonymizer = AnonymizerEngine()
-    _register_custom_recognizers(analyzer)
 
     preprocessed_text = _remove_rare_disease_terms(text)
     preprocessed_text = _shift_dates(preprocessed_text, _DateShiftConfig(seed=patient_scope_seed))
