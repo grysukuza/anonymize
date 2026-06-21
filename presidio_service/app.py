@@ -6,6 +6,8 @@ from flask import Flask, request, jsonify, render_template, session
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine, OperatorConfig
 
+from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+
 app = Flask(__name__)
 app.secret_key = "change-me-in-production"
 
@@ -122,6 +124,54 @@ def anonymize():
         anonymized = _remove_unusual_words(anonymized)
 
     return jsonify({"text": anonymized}), 200
+
+
+@app.post("/pii/extract")
+def pii_extract():
+    """OpenMed-style PII extraction.
+
+    Request JSON:  {"text": "...", "lang": "en"}
+    Response JSON: {"entities": [{"label", "text", "start", "end", "score"}, ...]}
+    """
+    if not _is_logged_in():
+        return jsonify({"error": "Login required."}), 401
+
+    data = request.get_json(force=True) or {}
+    if "text" not in data:
+        return jsonify({"error": "Missing 'text' field in JSON body."}), 400
+
+    entities = extract_pii(data["text"], lang=data.get("lang", "en"))
+    return jsonify({"entities": [e.to_dict() for e in entities]}), 200
+
+
+@app.post("/pii/deidentify")
+def pii_deidentify():
+    """OpenMed-style de-identification.
+
+    Request JSON:  {"text": "...", "method": "mask|replace|hash|shift_dates",
+                    "lang": "en", "date_shift_days": int}
+    Response JSON: {"text": "...", "method": "..."}
+    """
+    if not _is_logged_in():
+        return jsonify({"error": "Login required."}), 401
+
+    data = request.get_json(force=True) or {}
+    if "text" not in data:
+        return jsonify({"error": "Missing 'text' field in JSON body."}), 400
+
+    method = data.get("method", "mask")
+    if method not in DEIDENTIFY_METHODS:
+        return jsonify({
+            "error": f"Invalid method. Choose one of: {', '.join(DEIDENTIFY_METHODS)}"
+        }), 400
+
+    result = deidentify(
+        data["text"],
+        method=method,
+        lang=data.get("lang", "en"),
+        date_shift_days=int(data.get("date_shift_days", 0)),
+    )
+    return jsonify({"text": result, "method": method}), 200
 
 
 if __name__ == "__main__":

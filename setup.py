@@ -9,6 +9,9 @@ setup(
             "presidio-analyzer",
             "presidio-anonymizer",
         ],
+        "synthetic": [
+            "faker>=30.0.0",
+        ],
     },
     entry_points={
         "console_scripts": [

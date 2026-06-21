@@ -6,53 +6,58 @@
   <title>Text Anonymizer</title>
   <style>
     :root {
-      --bg: #0f172a;
-      --panel: #1e293b;
-      --panel-2: #273449;
-      --border: #334155;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-hover: #0ea5e9;
-      --success: #22c55e;
-      --danger: #ef4444;
+      /* Claude-inspired palette */
+      --bg: #faf9f5;
+      --panel: #ffffff;
+      --panel-2: #f5f4ee;
+      --border: #e8e6dd;
+      --border-strong: #d8d5c8;
+      --text: #1f1e1c;
+      --muted: #6f6e69;
+      --accent: #c96442;       /* Claude coral / terracotta */
+      --accent-hover: #b4543494;
+      --accent-strong: #a84b2f;
+      --accent-soft: #f4e7e0;
+      --success: #3f8f5b;
+      --danger: #c0392b;
+      --shadow: 0 1px 2px rgba(20, 19, 17, 0.04), 0 6px 24px rgba(20, 19, 17, 0.06);
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 32px 16px;
+      padding: 48px 16px;
+      line-height: 1.5;
     }
 
     .container {
-      max-width: 1100px;
+      max-width: 1080px;
       margin: 0 auto;
     }
 
     header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 40px;
     }
 
     h1 {
-      margin: 0 0 8px;
-      font-size: 2rem;
-      font-weight: 700;
-      background: linear-gradient(90deg, #38bdf8, #a78bfa);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
+      margin: 0 0 10px;
+      font-family: ui-serif, Georgia, "Times New Roman", Cambria, serif;
+      font-size: 2.6rem;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--text);
     }
 
     .subtitle {
       color: var(--muted);
       margin: 0;
-      font-size: 0.95rem;
+      font-size: 1.02rem;
     }
 
     .panels {
@@ -68,32 +73,34 @@
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
+      border-radius: 16px;
+      padding: 22px;
       display: flex;
       flex-direction: column;
+      box-shadow: var(--shadow);
     }
 
     .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
 
     .panel-title {
-      font-size: 0.85rem;
+      font-size: 0.78rem;
       font-weight: 600;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--muted);
     }
 
     .badge {
       font-size: 0.7rem;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 999px;
       background: var(--panel-2);
+      border: 1px solid var(--border);
       color: var(--muted);
     }
 
@@ -102,19 +109,21 @@
       min-height: 280px;
       background: var(--panel-2);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 12px;
       color: var(--text);
-      padding: 12px;
+      padding: 14px;
       font-family: ui-monospace, "SF Mono", Monaco, "Cascadia Code", monospace;
       font-size: 0.9rem;
-      line-height: 1.5;
+      line-height: 1.6;
       resize: vertical;
     }
+
+    textarea::placeholder { color: var(--muted); }
 
     textarea:focus {
       outline: none;
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+      box-shadow: 0 0 0 3px rgba(201, 100, 66, 0.14);
     }
 
     .output {
@@ -133,24 +142,38 @@
       display: flex;
       gap: 12px;
       justify-content: center;
-      margin: 24px 0;
+      margin: 28px 0;
       flex-wrap: wrap;
+    }
+
+    input[type="text"], input[type="password"], input[type="number"], #username, #password {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(201, 100, 66, 0.14);
     }
 
     button {
       background: var(--accent);
-      color: #0f172a;
+      color: #fff;
       border: none;
-      border-radius: 8px;
-      padding: 12px 24px;
+      border-radius: 10px;
+      padding: 12px 26px;
       font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
     }
 
     button:hover:not(:disabled) {
-      background: var(--accent-hover);
+      background: var(--accent-strong);
     }
 
     button:active:not(:disabled) {
@@ -158,18 +181,19 @@
     }
 
     button:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
     }
 
     button.secondary {
-      background: transparent;
+      background: var(--panel);
       color: var(--text);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-strong);
     }
 
     button.secondary:hover:not(:disabled) {
       background: var(--panel-2);
+      border-color: var(--accent);
     }
 
     .status {
@@ -186,7 +210,7 @@
       display: inline-block;
       width: 14px;
       height: 14px;
-      border: 2px solid var(--border);
+      border: 2px solid var(--border-strong);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
@@ -202,30 +226,35 @@
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
+      align-items: center;
     }
 
     .example-chip {
-      background: var(--panel-2);
+      background: var(--panel);
       color: var(--muted);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-strong);
       border-radius: 999px;
-      padding: 4px 12px;
+      padding: 5px 14px;
       font-size: 0.8rem;
       cursor: pointer;
       transition: all 0.15s;
     }
 
     .example-chip:hover {
-      background: var(--border);
-      color: var(--text);
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent-strong);
     }
+
+    label { font-size: 0.92rem; color: var(--text); line-height: 2; }
+    input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; vertical-align: middle; margin-right: 4px; }
 
     footer {
       text-align: center;
       color: var(--muted);
       font-size: 0.8rem;
-      margin-top: 32px;
+      margin-top: 40px;
     }
 
     footer a { color: var(--accent); text-decoration: none; }
@@ -247,8 +276,8 @@
         <span class="badge" id="authBadge">signed out</span>
       </div>
       <div class="controls" style="justify-content: flex-start; margin: 0;">
-        <input id="username" placeholder="Username" value="admin" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);" />
-        <input id="password" type="password" placeholder="Password" value="anonymize123" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);" />
+        <input id="username" placeholder="Username" value="admin" />
+        <input id="password" type="password" placeholder="Password" value="anonymize123" />
         <button id="loginBtn" class="secondary">Login</button>
         <button id="logoutBtn" class="secondary" disabled>Logout</button>
       </div>
@@ -286,7 +315,7 @@
       </div>
       <label><input type="checkbox" id="adjustData"> Adjust data markers</label><br/>
       <label><input type="checkbox" id="adjustNumbers"> Adjust numbers</label>
-      <input id="numberDelta" type="number" value="1" style="width:80px;margin-left:8px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);" />
+      <input id="numberDelta" type="number" value="1" style="width:80px;margin-left:8px;" />
       <br/>
       <label><input type="checkbox" id="removeUnusualWords"> Take out unusual words</label>
     </div>
