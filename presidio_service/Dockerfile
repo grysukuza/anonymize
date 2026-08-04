@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Copy application code
 COPY app.py .
+COPY security_config.py .
 COPY templates/ ./templates/
 
 # Expose port

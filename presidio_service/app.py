@@ -5,14 +5,14 @@ import re
 from flask import Flask, request, jsonify, render_template, session
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine, OperatorConfig
+from werkzeug.security import check_password_hash
+
+from security_config import load_security_config
 
 app = Flask(__name__)
-app.secret_key = "change-me-in-production"
-
-# Simple demo credentials for local usage.
-VALID_USERS = {
-    "admin": "anonymize123",
-}
+security_config = load_security_config()
+app.secret_key = security_config.session_secret
+VALID_USERS = {security_config.username: security_config.password_hash}
 
 # Initialize Presidio engines once at startup
 analyzer = AnalyzerEngine()
@@ -63,7 +63,12 @@ def login():
     data = request.get_json(force=True) or {}
     username = data.get("username", "")
     password = data.get("password", "")
-    if VALID_USERS.get(username) == password:
+    password_hash = VALID_USERS.get(username) if isinstance(username, str) else None
+    if (
+        password_hash
+        and isinstance(password, str)
+        and check_password_hash(password_hash, password)
+    ):
         session["authenticated"] = True
         session["username"] = username
         return jsonify({"status": "ok", "username": username}), 200
