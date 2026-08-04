@@ -32,8 +32,10 @@ Production deployment uses Gunicorn on the same port.
 - `anonymize_data/core.py` — Medical text anonymization with custom operators
 - `anonymize_data/__main__.py` — CLI demo script (`python -m anonymize_data`)
 - `setup.py` — Package setup for `anonymize_data`
-- `Pipfile` — Project dependencies
+- `pyproject.toml` — Root package metadata and dependency declarations
+- `uv.lock` — Reproducible root dependency resolution
+- `presidio_service/requirements.txt` — Deployed service dependencies
 
 ## Dependencies
 
-Installed via pip: `flask`, `gunicorn`, `presidio-analyzer`, `presidio-anonymizer`, `openai`, `pydantic`, `instructor`, `spacy` + `en_core_web_lg` model.
+Root dependencies are declared in `pyproject.toml` and locked by `uv.lock`. Replit and Docker install the deployed service from `presidio_service/requirements.txt`; the spaCy `en_core_web_lg` model is installed separately during deployment.
