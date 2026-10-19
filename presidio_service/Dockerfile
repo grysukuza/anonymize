@@ -1,3 +1,5 @@
+# Build from the repository root so the anonymize_data package is in context:
+#   docker build -f presidio_service/Dockerfile -t presidio-service .
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -8,14 +10,15 @@ RUN apt-get update \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY presidio_service/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
     && python -m spacy download en_core_web_lg
 
-# Copy application code
-COPY app.py .
-COPY templates/ ./templates/
+# Copy application code (app.py imports the anonymize_data package)
+COPY anonymize_data/ ./anonymize_data/
+COPY presidio_service/app.py .
+COPY presidio_service/templates/ ./templates/
 
 # Expose port
 EXPOSE 5000

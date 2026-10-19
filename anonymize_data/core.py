@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import hashlib
 import random
 import re
-from typing import Iterable
 
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
 from presidio_anonymizer import AnonymizerEngine
@@ -91,22 +90,52 @@ def _build_operators() -> dict[str, OperatorConfig]:
         "PERSON": OperatorConfig("replace", {"new_value": "Patient"}),
         "DATE_TIME": OperatorConfig("replace", {"new_value": "[DATE_SHIFTED]"}),
         "LOCATION": OperatorConfig("replace", {"new_value": "[REGION_REDACTED]"}),
-        "US_SOCIAL_SECURITY_NUMBER": OperatorConfig("replace", {"new_value": "XXX-XX-XXXX"}),
+        # Entity names must match what Presidio's recognizers actually emit.
+        "US_SSN": OperatorConfig("replace", {"new_value": "XXX-XX-XXXX"}),
         "MEDICAL_RECORD_NUMBER": OperatorConfig("replace", {"new_value": "MRNXXXXXX"}),
         "HOSPITAL": OperatorConfig("replace", {"new_value": "[FACILITY_REDACTED]"}),
         "CREDIT_CARD": OperatorConfig("replace", {"new_value": "XXXX-XXXX-XXXX-XXXX"}),
-        "BANK_ACCOUNT": OperatorConfig("replace", {"new_value": "XXXX-XXXX-XXXX-XXXX"}),
-        "BANK_ROUTING": OperatorConfig("replace", {"new_value": "XXXXXXXXX"}),
-        "LICENSE_PLATE": OperatorConfig("replace", {"new_value": "[LICENSE_REDACTED]"}),
+        "US_BANK_NUMBER": OperatorConfig("replace", {"new_value": "XXXX-XXXX-XXXX-XXXX"}),
+        "IBAN_CODE": OperatorConfig("replace", {"new_value": "[IBAN_REDACTED]"}),
+        "US_DRIVER_LICENSE": OperatorConfig("replace", {"new_value": "[LICENSE_REDACTED]"}),
         "URL": OperatorConfig("replace", {"new_value": "[URL_REDACTED]"}),
         "IP_ADDRESS": OperatorConfig("replace", {"new_value": "[IP_REDACTED]"}),
-        "PASSPORT_NUMBER": OperatorConfig("replace", {"new_value": "[PASSPORT_REDACTED]"}),
+        "US_PASSPORT": OperatorConfig("replace", {"new_value": "[PASSPORT_REDACTED]"}),
     }
 
 
 def _register_custom_recognizers(analyzer: AnalyzerEngine) -> None:
     for recognizer in (HospitalRecognizer(), MedicalRecordRecognizer()):
         analyzer.registry.add_recognizer(recognizer)
+
+
+def build_analyzer() -> AnalyzerEngine:
+    """Build an AnalyzerEngine with the project's custom medical recognizers registered."""
+    analyzer = AnalyzerEngine()
+    _register_custom_recognizers(analyzer)
+    return analyzer
+
+
+# Engines are expensive to build (the analyzer loads a full spaCy model), so the
+# whole package shares one lazily created pair.
+_ANALYZER: AnalyzerEngine | None = None
+_ANONYMIZER: AnonymizerEngine | None = None
+
+
+def get_analyzer() -> AnalyzerEngine:
+    """Return the shared AnalyzerEngine, building it on first use."""
+    global _ANALYZER
+    if _ANALYZER is None:
+        _ANALYZER = build_analyzer()
+    return _ANALYZER
+
+
+def get_anonymizer() -> AnonymizerEngine:
+    """Return the shared AnonymizerEngine, building it on first use."""
+    global _ANONYMIZER
+    if _ANONYMIZER is None:
+        _ANONYMIZER = AnonymizerEngine()
+    return _ANONYMIZER
 
 
 def anonymize_medical_text(text: str, *, patient_scope_seed: str = "default") -> str:
@@ -118,9 +147,8 @@ def anonymize_medical_text(text: str, *, patient_scope_seed: str = "default") ->
     2. Deterministic date shifting (small data distortion preserving sequence utility).
     3. Rare disease redaction for quasi-identifier suppression.
     """
-    analyzer = AnalyzerEngine()
-    anonymizer = AnonymizerEngine()
-    _register_custom_recognizers(analyzer)
+    analyzer = get_analyzer()
+    anonymizer = get_anonymizer()
 
     preprocessed_text = _remove_rare_disease_terms(text)
     preprocessed_text = _shift_dates(preprocessed_text, _DateShiftConfig(seed=patient_scope_seed))

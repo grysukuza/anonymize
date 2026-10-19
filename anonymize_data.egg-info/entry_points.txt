@@ -1,2 +1,0 @@
-[console_scripts]
-anonymize-data = anonymize_data.__main__:main
