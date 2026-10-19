@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Text Anonymizer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%23c96442'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='%23fff' font-family='Georgia,serif'%3EA%3C/text%3E%3C/svg%3E" />
   <style>
     :root {
       /* Claude-inspired palette */
@@ -15,7 +16,6 @@
       --text: #1f1e1c;
       --muted: #6f6e69;
       --accent: #c96442;       /* Claude coral / terracotta */
-      --accent-hover: #b4543494;
       --accent-strong: #a84b2f;
       --accent-soft: #f4e7e0;
       --success: #3f8f5b;
@@ -321,7 +321,7 @@
     </div>
 
     <div class="controls">
-      <button id="anonymizeBtn">Anonymize</button>
+      <button id="anonymizeBtn" disabled>Anonymize</button>
       <button id="clearBtn" class="secondary">Clear</button>
       <button id="copyBtn" class="secondary" disabled>Copy result</button>
     </div>
@@ -355,7 +355,7 @@
     const removeUnusualWords = document.getElementById("removeUnusualWords");
 
     const EXAMPLES = {
-      medical: "Patient John Smith, born on 01/02/1980, was admitted to St. Mary's Hospital on 03/15/2024. His SSN is 123-45-6789 and medical record number is MRN789012. He can be reached at john.smith@example.com or 555-123-4567.",
+      medical: "Patient John Smith, born on 01/02/1980, was admitted to St. Mary's Hospital on 03/15/2024. His SSN is 126-48-6789 and medical record number is MRN789012. He can be reached at john.smith@example.com or 555-123-4567.",
       contact: "Hi, my name is Sarah Johnson. You can email me at sarah.j@company.com or call me at (415) 555-7890. I live at 742 Evergreen Terrace, Springfield.",
       financial: "Please charge my credit card 4111-1111-1111-1111 (exp 12/27). My account holder name is Michael Brown, SSN 987-65-4321, and my IBAN is GB82WEST12345698765432."
     };
@@ -364,7 +364,6 @@
       chip.addEventListener("click", () => {
         input.value = EXAMPLES[chip.dataset.example] || "";
         updateCount();
-    refreshSession();
         input.focus();
       });
     });
@@ -375,7 +374,12 @@
 
     function setStatus(msg, type = "") {
       status.className = "status" + (type ? " " + type : "");
-      status.innerHTML = msg;
+      status.textContent = msg;
+      if (type === "busy") {
+        const spinner = document.createElement("span");
+        spinner.className = "spinner";
+        status.prepend(spinner);
+      }
     }
 
     function setOutput(text, isPlaceholder = false) {
@@ -386,13 +390,17 @@
     input.addEventListener("input", updateCount);
 
     async function refreshSession() {
-      const res = await fetch("/session");
-      const data = await res.json();
-      const loggedIn = !!data.authenticated;
-      authBadge.textContent = loggedIn ? `signed in as ${data.username}` : "signed out";
-      loginBtn.disabled = loggedIn;
-      logoutBtn.disabled = !loggedIn;
-      anonymizeBtn.disabled = !loggedIn;
+      try {
+        const res = await fetch("/session");
+        const data = await res.json();
+        const loggedIn = !!data.authenticated;
+        authBadge.textContent = loggedIn ? `signed in as ${data.username}` : "signed out";
+        loginBtn.disabled = loggedIn;
+        logoutBtn.disabled = !loggedIn;
+        anonymizeBtn.disabled = !loggedIn;
+      } catch {
+        authBadge.textContent = "signed out";
+      }
     }
 
     loginBtn.addEventListener("click", async () => {
@@ -419,7 +427,6 @@
       copyBtn.disabled = true;
       setStatus("");
       updateCount();
-    refreshSession();
       input.focus();
     });
 
@@ -441,7 +448,7 @@
       }
 
       anonymizeBtn.disabled = true;
-      setStatus('<span class="spinner"></span>Analyzing and anonymizing...');
+      setStatus("Analyzing and anonymizing...", "busy");
       outputBadge.textContent = "processing";
 
       try {

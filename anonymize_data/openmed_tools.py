@@ -21,14 +21,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 import hashlib
-import random
-import re
+from itertools import islice
 from typing import Iterable, Sequence
 
-from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
-
-from .core import build_analyzer
+from .core import get_analyzer
 
 try:  # Faker powers locale-aware, format-preserving synthetic replacement.
     from faker import Faker
@@ -67,18 +63,16 @@ class PiiEntity:
         return asdict(self)
 
 
-# A shared analyzer/anonymizer pair is expensive to build, so cache them.
-_ANALYZER = None
-_ANONYMIZER = None
+# Faker instances are moderately expensive to construct; share one. Determinism
+# comes from per-value seeding in _fake_value, not from instance freshness.
+_FAKER = None
 
 
-def _get_engines():
-    global _ANALYZER, _ANONYMIZER
-    if _ANALYZER is None:
-        _ANALYZER = build_analyzer()
-    if _ANONYMIZER is None:
-        _ANONYMIZER = AnonymizerEngine()
-    return _ANALYZER, _ANONYMIZER
+def _get_faker():
+    global _FAKER
+    if _FAKER is None and _FAKER_AVAILABLE:
+        _FAKER = Faker()
+    return _FAKER
 
 
 def _smart_merge(entities: list[PiiEntity], text: str) -> list[PiiEntity]:
@@ -156,8 +150,7 @@ def extract_pii(
     score_threshold:
         Drop detections below this confidence.
     """
-    analyzer, _ = _get_engines()
-    results = analyzer.analyze(text=text, language=lang)
+    results = get_analyzer().analyze(text=text, language=lang)
 
     found = [
         PiiEntity(
@@ -266,7 +259,7 @@ def deidentify(
     if not detected:
         return text
 
-    faker = Faker() if (method == "replace" and _FAKER_AVAILABLE) else None
+    faker = _get_faker() if method == "replace" else None
 
     # Rebuild the string right-to-left so earlier offsets stay valid.
     out = text
@@ -333,10 +326,13 @@ class BatchProcessor:
         return extract_pii(text, lang=self.lang)
 
     def process_texts(self, texts: Iterable[str]) -> list:
-        """Process ``texts`` and return per-document results in input order."""
-        texts = list(texts)
+        """Process ``texts`` and return per-document results in input order.
+
+        The input is consumed lazily in ``batch_size`` chunks, so a generator of
+        documents is never materialized all at once.
+        """
         results: list = []
-        for start in range(0, len(texts), self.batch_size):
-            chunk = texts[start : start + self.batch_size]
+        iterator = iter(texts)
+        while chunk := list(islice(iterator, self.batch_size)):
             results.extend(self._process_one(t) for t in chunk)
         return results

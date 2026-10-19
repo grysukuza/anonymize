@@ -1,28 +1,63 @@
 """
 Flask application for the Presidio anonymization microservice.
 """
+import hmac
+import os
 import re
-from flask import Flask, request, jsonify, render_template, session
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine, OperatorConfig
+import secrets
+import sys
+from pathlib import Path
 
-from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+from flask import Flask, request, jsonify, render_template, session
+from presidio_anonymizer.entities import OperatorConfig
+
+try:
+    from anonymize_data.core import get_analyzer, get_anonymizer
+    from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+except ModuleNotFoundError:
+    # Running from presidio_service/ without the package installed: the
+    # repository root (one level up) holds anonymize_data/.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from anonymize_data.core import get_analyzer, get_anonymizer
+    from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
 
 app = Flask(__name__)
-app.secret_key = "change-me-in-production"
+# Sessions survive restarts only when SESSION_SECRET is set; the random
+# fallback keeps the demo safe to expose without a hardcoded key.
+app.secret_key = os.environ.get("SESSION_SECRET") or secrets.token_hex(32)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
-# Simple demo credentials for local usage.
+# Simple demo credentials for local usage; override via environment.
 VALID_USERS = {
-    "admin": "anonymize123",
+    os.environ.get("ANONYMIZE_USERNAME", "admin"): os.environ.get(
+        "ANONYMIZE_PASSWORD", "anonymize123"
+    ),
 }
 
-# Initialize Presidio engines once at startup
-analyzer = AnalyzerEngine()
-anonymizer = AnonymizerEngine()
+# Warm the shared engines at import time so the first request doesn't pay the
+# spaCy model load. Both the /anonymize and /pii/* routes use this same pair.
+analyzer = get_analyzer()
+anonymizer = get_anonymizer()
 
 
 def _is_logged_in() -> bool:
     return bool(session.get("authenticated"))
+
+
+def _get_json() -> dict | None:
+    """Parse the request body as JSON, returning None when it is invalid."""
+    data = request.get_json(force=True, silent=True)
+    return data if isinstance(data, dict) else None
+
+
+def _parse_int(value, default: int = 0) -> int | None:
+    """Coerce a JSON value to int, returning None when it cannot be."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _adjust_numbers(text: str, delta: int) -> str:
@@ -62,10 +97,11 @@ def health():
 
 @app.post("/login")
 def login():
-    data = request.get_json(force=True) or {}
-    username = data.get("username", "")
-    password = data.get("password", "")
-    if VALID_USERS.get(username) == password:
+    data = _get_json() or {}
+    username = str(data.get("username", ""))
+    password = str(data.get("password", ""))
+    expected = VALID_USERS.get(username)
+    if expected is not None and hmac.compare_digest(expected, password):
         session["authenticated"] = True
         session["username"] = username
         return jsonify({"status": "ok", "username": username}), 200
@@ -93,11 +129,17 @@ def anonymize():
     if not _is_logged_in():
         return jsonify({"error": "Login required."}), 401
 
-    data = request.get_json(force=True)
-    if not data or "text" not in data:
+    data = _get_json()
+    if data is None or "text" not in data:
         return jsonify({"error": "Missing 'text' field in JSON body."}), 400
 
     text = data["text"]
+    if not isinstance(text, str):
+        return jsonify({"error": "'text' must be a string."}), 400
+
+    delta = _parse_int(data.get("number_delta"))
+    if delta is None:
+        return jsonify({"error": "'number_delta' must be an integer."}), 400
 
     # Analyze text for PII
     results = analyzer.analyze(text=text, language="en")
@@ -117,7 +159,6 @@ def anonymize():
     ).text
 
     if data.get("adjust_numbers"):
-        delta = int(data.get("number_delta", 0))
         anonymized = _adjust_numbers(anonymized, delta)
 
     if data.get("remove_unusual_words"):
@@ -136,9 +177,11 @@ def pii_extract():
     if not _is_logged_in():
         return jsonify({"error": "Login required."}), 401
 
-    data = request.get_json(force=True) or {}
-    if "text" not in data:
+    data = _get_json()
+    if data is None or "text" not in data:
         return jsonify({"error": "Missing 'text' field in JSON body."}), 400
+    if not isinstance(data["text"], str):
+        return jsonify({"error": "'text' must be a string."}), 400
 
     entities = extract_pii(data["text"], lang=data.get("lang", "en"))
     return jsonify({"entities": [e.to_dict() for e in entities]}), 200
@@ -155,9 +198,11 @@ def pii_deidentify():
     if not _is_logged_in():
         return jsonify({"error": "Login required."}), 401
 
-    data = request.get_json(force=True) or {}
-    if "text" not in data:
+    data = _get_json()
+    if data is None or "text" not in data:
         return jsonify({"error": "Missing 'text' field in JSON body."}), 400
+    if not isinstance(data["text"], str):
+        return jsonify({"error": "'text' must be a string."}), 400
 
     method = data.get("method", "mask")
     if method not in DEIDENTIFY_METHODS:
@@ -165,11 +210,15 @@ def pii_deidentify():
             "error": f"Invalid method. Choose one of: {', '.join(DEIDENTIFY_METHODS)}"
         }), 400
 
+    shift_days = _parse_int(data.get("date_shift_days"))
+    if shift_days is None:
+        return jsonify({"error": "'date_shift_days' must be an integer."}), 400
+
     result = deidentify(
         data["text"],
         method=method,
         lang=data.get("lang", "en"),
-        date_shift_days=int(data.get("date_shift_days", 0)),
+        date_shift_days=shift_days,
     )
     return jsonify({"text": result, "method": method}), 200
 

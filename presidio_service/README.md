@@ -110,9 +110,9 @@ print(clean_text)
 ## Docker
 
 ### Build Image
+Build from the repository root (the image needs the `anonymize_data` package):
 ```bash
-cd presidio_service
-docker build -t presidio-service .
+docker build -f presidio_service/Dockerfile -t presidio-service .
 ```
 
 ### Run Container

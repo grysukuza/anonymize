@@ -4,7 +4,13 @@ Run with: ``pytest tests/test_openmed_tools.py``
 (requires presidio + the ``en_core_web_lg`` spaCy model).
 """
 
-from anonymize_data import BatchProcessor, PiiEntity, deidentify, extract_pii
+from anonymize_data import (
+    BatchProcessor,
+    PiiEntity,
+    anonymize_medical_text,
+    deidentify,
+    extract_pii,
+)
 
 SAMPLE = "Patient John Smith, SSN 126-48-6789, phone 555-123-4567, born 01/02/1980."
 
@@ -60,3 +66,17 @@ def test_batch_processor_preserves_order_and_count():
     extract = BatchProcessor(operation="extract_pii")
     found = extract.process_texts(texts)
     assert len(found) == 3 and all(isinstance(x, list) for x in found)
+
+
+def test_batch_processor_accepts_generators():
+    masked = BatchProcessor(operation="deidentify", method="mask", batch_size=2).process_texts(
+        t for t in [SAMPLE, "No PII here at all."]
+    )
+    assert len(masked) == 2 and "[PERSON]" in masked[0]
+
+
+def test_anonymize_medical_text_uses_specific_ssn_operator():
+    out = anonymize_medical_text(SAMPLE)
+    assert "126-48-6789" not in out
+    # US_SSN must hit its dedicated operator, not fall through to <REDACTED>.
+    assert "XXX-XX-XXXX" in out
