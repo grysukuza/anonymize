@@ -16,9 +16,9 @@ It does not meet HIPAA Safe Harbor, and two of its four methods leak or are reve
 | 3 | High | `hash` uses a fixed public salt and a 32-bit truncated SHA-256, so tokens reverse by enumeration |
 | 4 | High | `replace` uses a fixed public seed, so synthetic values reverse by dictionary lookup |
 | 5 | High | 7 of the 18 Safe Harbor categories are missing and 6 are partial; `mask` leaked 13 of 37 synthetic probes |
-| 6 | High | Default credentials `admin` / `anonymize123`, no login rate limit, and public binding in `.replit` |
+| 6 | High | Default credentials `admin` / `anonymize123`, pre-filled in the login form, with no login rate limit and public binding in `.replit` |
 | 7 | Medium | The random per-process session secret breaks login under the shipped `gunicorn -w 2` command |
-| 8 | Medium | `BatchProcessor` discards all completed results when one document fails, and its memory bound claim is false |
+| 8 | High | `BatchProcessor` returns a bare string unredacted, discards all completed results when one document fails, and its memory bound claim is false |
 | 9 | Medium | Unvalidated `lang`, unbounded `date_shift_days`, and no request size limit produce HTML 500s |
 | 10 | Low | Container runs as root, cookies lack `Secure`, raw PHI responses lack `Cache-Control: no-store` |
 
@@ -29,6 +29,7 @@ Some checks came back clean, all measured. The 22 existing tests pass. Neither t
 - `pytest tests/` returned `22 passed in 2.49s` (presidio-analyzer 2.2.364, spaCy 3.8.16, `en_core_web_lg`, Faker 40.43.0, Python 3.12).
 - The probe in the appendix runs every finding below against the real Presidio engine. Rerun it with `python probe.py` from any directory once the dependencies are installed.
 - Finding 7 was reproduced against a live `gunicorn -w 2` process with `curl`.
+- A second reviewer on a different model read the same files independently, without running Presidio. It agreed on findings 1 to 6, 8, and 10. Its extra points (the pre-filled credentials, the bare-string batch input, and the re-identification code rule) were checked by execution or against the rule text and added.
 - The probe ran twice. The two runs differed in one row, which finding 1 explains and which was then pinned with `PYTHONHASHSEED` 1 to 6.
 
 ## Findings
@@ -67,6 +68,8 @@ Fix. Require a nonzero shift, or derive a per-patient random shift from a server
 `_hash_token` (`openmed_tools.py:175-177`) computes unkeyed `sha256(f"{salt}:{label}:{value}")` with the default salt `"openmed"` and keeps 8 hex characters (32 bits). The API exposes no salt parameter, so every deployment shares the published salt.
 The probe recovered `219-09-9999` from `[US_SSN_de8ee015]` after about 10^5 candidate hashes in 0.1 s of single-threaded CPython (measured). At that rate the full 10^9 SSN space takes about 17 minutes on one core (inferred). It also recovered a name from a candidate list.
 The docstring calls the token "irreversible" (`openmed_tools.py:248`). It is not, for any low-entropy identifier.
+
+Stable tokens derived from the identifier also conflict with the re-identification code rule (45 CFR 164.514(c)), which says such a code must not be derived from information about the individual. That is my reading of the rule, not legal advice.
 
 Fix. Use HMAC-SHA-256 with a per-deployment secret key loaded from the environment, keep at least 128 bits, and remove the default salt.
 
@@ -108,7 +111,7 @@ Fix. Add pattern recognizers for ZIP, age over 89, health plan and member IDs, M
 
 ### 6. High. Default credentials and public exposure
 
-`VALID_USERS` falls back to `admin` / `anonymize123` when the environment variables are unset (`app.py:31-35`). The tests log in with these values. Thirty consecutive bad passwords all returned 401 with no lockout or delay (measured).
+`VALID_USERS` falls back to `admin` / `anonymize123` when the environment variables are unset (`app.py:31-35`). The login form pre-fills both values (`templates/index.html:279-280`), so anyone who loads the page sees working credentials. The tests log in with these values. Thirty consecutive bad passwords all returned 401 with no lockout or delay (measured).
 The `.replit` workflow runs `python app.py`, which binds `0.0.0.0:5000` (`app.py:228`), and maps port 5000 to external port 80. The `.replit` deployment and the Dockerfile also bind `0.0.0.0`.
 [PR #4](https://github.com/grysukuza/anonymize/pull/4) ("Require explicit anonymizer auth secrets") targets this. I did not check whether it rebases cleanly onto PR #3.
 
@@ -122,10 +125,11 @@ Flask cookie sessions are also not revoked by `/logout`. A copied cookie stays v
 
 Fix. Require `SESSION_SECRET` (see finding 6). Set `PERMANENT_SESSION_LIFETIME` and mark sessions permanent so cookies expire.
 
-### 8. Medium. `BatchProcessor` error handling
+### 8. High. `BatchProcessor` input and error handling
 
-`process_texts` (`openmed_tools.py:328-338`) builds one list and has no per-document error handling.
+`process_texts` (`openmed_tools.py:328-338`) builds one list and has no input validation or per-document error handling.
 
+- A bare string is a valid `Iterable[str]`, so `process_texts("Contact Zelda Quintrell today.")` processes 30 one-character documents. No entity is detected, and joining the output returns the original text unredacted (measured). This misuse fails silently, with no error raised.
 - A single `None` in a 4-document batch raised `ValueError: [E1041] Expected a string...` and discarded the completed results (measured).
 - A document over spaCy's 1,000,000-character limit raises `ValueError` the same way (measured).
 - An invalid `method` passes `__init__` and fails only on the first document (measured).
@@ -133,7 +137,7 @@ Fix. Require `SESSION_SECRET` (see finding 6). Set `PERMANENT_SESSION_LIFETIME` 
 - The docstring says chunking "bounds peak memory". Input is consumed lazily, but every output is accumulated in one list (`results.extend`), so peak memory still grows with the corpus.
 - Exception messages did not contain document text (measured). Callers that log `repr(doc)` on failure would still leak it.
 
-Fix. Return a per-document result or error record (index, ok, value or error type), validate `method` in `__init__`, reject kwargs that the chosen operation ignores, and offer a generator variant that yields results.
+Fix. Reject a `str` passed as the collection and non-`str` items. Return a per-document result or error record (index, ok, value or error type), validate `method` in `__init__`, reject kwargs that the chosen operation ignores, and offer a generator variant that yields results.
 
 ### 9. Medium. API input validation
 
@@ -148,6 +152,7 @@ Fix. Allow-list `lang`, bound `date_shift_days` (for example to 3650), set `MAX_
 
 - The Dockerfile has no `USER` directive, so gunicorn runs as root.
 - `SESSION_COOKIE_SECURE` is unset, so the cookie travels over plain HTTP.
+- `/login` runs `hmac.compare_digest` only when the username exists (`app.py:103-104`), so response timing can reveal valid usernames.
 - There is no CSRF token. `SameSite=Lax` blocks cross-site POSTs in current browsers, so the risk is low.
 - `_resolve_overlaps` drops lower-score overlapping spans. The only partial leak in the probe corpus was one `-` character, which is negligible.
 - `adjust_numbers` adds a constant to every remaining number. It is reversible and is not a de-identification step.
