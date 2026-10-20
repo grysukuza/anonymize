@@ -42,6 +42,12 @@ def test_index_serves_ui(client):
     assert b"Text Anonymizer" in res.data
 
 
+def test_index_does_not_prefill_credentials(client):
+    body = client.get("/").get_data(as_text=True)
+    assert "anonymize123" not in body
+    assert 'value="admin"' not in body
+
+
 def test_login_rejects_bad_credentials(client):
     res = client.post("/login", json={"username": "admin", "password": "wrong"})
     assert res.status_code == 401
