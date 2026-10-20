@@ -1,6 +1,7 @@
 """
 Flask application for the Presidio anonymization microservice.
 """
+import hashlib
 import hmac
 import os
 import re
@@ -33,6 +34,9 @@ VALID_USERS = {
         "ANONYMIZE_PASSWORD", "anonymize123"
     ),
 }
+
+# Same digest work when the username is missing, so login timing does not reveal it.
+_UNKNOWN_USER_SECRET = secrets.token_hex(32)
 
 # Warm the shared engines at import time so the first request doesn't pay the
 # spaCy model load. Both the /anonymize and /pii/* routes use this same pair.
@@ -101,7 +105,12 @@ def login():
     username = str(data.get("username", ""))
     password = str(data.get("password", ""))
     expected = VALID_USERS.get(username)
-    if expected is not None and hmac.compare_digest(expected, password):
+    candidate = expected if expected is not None else _UNKNOWN_USER_SECRET
+    password_ok = hmac.compare_digest(
+        hashlib.sha256(candidate.encode()).digest(),
+        hashlib.sha256(password.encode()).digest(),
+    )
+    if expected is not None and password_ok:
         session["authenticated"] = True
         session["username"] = username
         return jsonify({"status": "ok", "username": username}), 200
