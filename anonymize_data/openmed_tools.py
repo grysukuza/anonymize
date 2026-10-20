@@ -44,6 +44,11 @@ _DATE_FORMATS: tuple[str, ...] = ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d-%m-%Y"
 # Presidio entity types that represent dates (used by ``shift_dates``).
 _DATE_LABELS: frozenset[str] = frozenset({"DATE_TIME", "DATE"})
 
+# Context-free spaCy NER labels have no checksum, so pattern recognizers win an exact tie.
+_CONTEXT_FREE_NER_LABELS: frozenset[str] = frozenset(
+    {"DATE_TIME", "PERSON", "LOCATION", "NRP", "ORGANIZATION"}
+)
+
 
 @dataclass(frozen=True)
 class PiiEntity:
@@ -113,11 +118,18 @@ def _resolve_overlaps(entities: list[PiiEntity]) -> list[PiiEntity]:
 
     Presidio recognizers routinely emit overlapping detections of *different*
     labels (e.g. a low-confidence ``URL`` over a high-confidence ``EMAIL``).
-    Span-replacement requires disjoint regions, so we greedily keep the highest
-    score (tie-break: longest span) and discard anything that overlaps it.
+    Span-replacement requires disjoint regions. The sort is a total order:
+    highest score, then longest span, then a pattern recognizer over a spaCy
+    NER label, then label, then start.
     """
+
+    def sort_key(entity: PiiEntity) -> tuple:
+        rank = 1 if entity.label in _CONTEXT_FREE_NER_LABELS else 0
+        length = entity.end - entity.start
+        return (-entity.score, -length, rank, entity.label, entity.start)
+
     accepted: list[PiiEntity] = []
-    for ent in sorted(entities, key=lambda e: (e.score, e.end - e.start), reverse=True):
+    for ent in sorted(entities, key=sort_key):
         if any(ent.start < kept.end and kept.start < ent.end for kept in accepted):
             continue
         accepted.append(ent)
