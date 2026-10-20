@@ -177,14 +177,14 @@ def _hash_token(value: str, label: str, salt: str, length: int = 8) -> str:
     return f"[{label}_{digest[:length]}]"
 
 
-def _shift_date_string(raw: str, shift_days: int) -> str:
+def _shift_date_string(raw: str, shift_days: int) -> str | None:
     for fmt in _DATE_FORMATS:
         try:
             parsed = datetime.strptime(raw.strip(), fmt)
         except ValueError:
             continue
         return raw.replace(raw.strip(), (parsed + timedelta(days=shift_days)).strftime(fmt))
-    return raw
+    return None
 
 
 def _fake_value(label: str, original: str, faker, seed: str) -> str:
@@ -274,7 +274,8 @@ def deidentify(
             replacement = _fake_value(ent.label, original, faker, seed=f"{seed}:{original}")
         else:  # shift_dates
             if ent.label in _DATE_LABELS:
-                replacement = _shift_date_string(original, date_shift_days)
+                shifted = _shift_date_string(original, date_shift_days)
+                replacement = f"[{ent.label}]" if shifted is None else shifted
             else:
                 replacement = f"[{ent.label}]"
 
