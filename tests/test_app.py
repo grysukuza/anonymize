@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "presidio_service"))
 
+import app as app_module  # noqa: E402
 from app import app  # noqa: E402
 
 SAMPLE = "Patient John Smith, SSN 126-48-6789, phone 555-123-4567, born 01/02/1980."
@@ -53,6 +54,29 @@ def test_login_rejects_bad_credentials(client):
     assert res.status_code == 401
     res = client.post("/login", json={"username": "ghost", "password": "anonymize123"})
     assert res.status_code == 401
+
+
+def test_login_compare_work_ignores_username_existence(client, monkeypatch):
+    """Equal comparison work regardless of whether the username exists."""
+    calls = []
+    real = app_module.hmac.compare_digest
+
+    def spy(a, b):
+        calls.append((len(a), len(b)))
+        return real(a, b)
+
+    monkeypatch.setattr(app_module.hmac, "compare_digest", spy)
+
+    known = client.post("/login", json={"username": "admin", "password": "wrong-pass"})
+    known_calls = list(calls)
+    calls.clear()
+    unknown = client.post("/login", json={"username": "ghost-user", "password": "wrong-pass"})
+
+    assert known.status_code == 401
+    assert unknown.status_code == 401
+    assert known_calls
+    assert calls
+    assert known_calls == calls
 
 
 def test_login_logout_roundtrip(client):
