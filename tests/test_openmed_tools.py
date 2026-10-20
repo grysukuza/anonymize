@@ -5,6 +5,7 @@ Run with: ``pytest tests/test_openmed_tools.py``
 """
 
 import pytest
+from presidio_analyzer import RecognizerResult
 
 from anonymize_data import (
     BatchProcessor,
@@ -69,6 +70,31 @@ def test_shift_dates_masks_unparseable_date_time(text, needle):
     out = deidentify(text, method="shift_dates", date_shift_days=30)
     assert needle not in out
     assert "[DATE_TIME]" in out
+
+
+class _OrderedAnalyzer:
+    def __init__(self, results):
+        self._results = results
+
+    def analyze(self, text, language):
+        return list(self._results)
+
+
+@pytest.mark.parametrize(
+    "order",
+    [("US_SSN", "DATE_TIME"), ("DATE_TIME", "US_SSN")],
+)
+def test_overlap_tie_prefers_pattern_recognizer(monkeypatch, order):
+    text = "SSN 219-09-9931 verified."
+    results = [
+        RecognizerResult(entity_type=label, start=4, end=15, score=0.85) for label in order
+    ]
+    monkeypatch.setattr(
+        "anonymize_data.openmed_tools.get_analyzer",
+        lambda: _OrderedAnalyzer(results),
+    )
+    assert [e.label for e in extract_pii(text)] == ["US_SSN"]
+    assert deidentify(text, method="mask") == "SSN [US_SSN] verified."
 
 
 def test_batch_processor_preserves_order_and_count():
