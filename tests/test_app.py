@@ -169,6 +169,18 @@ def test_pii_deidentify_shift_dates_requires_nonzero_days(logged_in, payload):
     }
 
 
+def test_pii_deidentify_hash_without_key_returns_503(logged_in, monkeypatch):
+    monkeypatch.delenv("ANONYMIZE_PSEUDONYM_KEY", raising=False)
+    res = logged_in.post(
+        "/pii/deidentify",
+        json={"text": "SSN 219-09-9999 verified.", "method": "hash"},
+    )
+    assert res.status_code == 503
+    assert res.get_json() == {
+        "error": "hash and replace require ANONYMIZE_PSEUDONYM_KEY to be set on the server."
+    }
+
+
 def test_pii_deidentify_shift_dates(logged_in):
     res = logged_in.post(
         "/pii/deidentify",
