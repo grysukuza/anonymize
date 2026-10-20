@@ -4,6 +4,8 @@ Run with: ``pytest tests/test_openmed_tools.py``
 (requires presidio + the ``en_core_web_lg`` spaCy model).
 """
 
+import pytest
+
 from anonymize_data import (
     BatchProcessor,
     PiiEntity,
@@ -66,6 +68,13 @@ def test_batch_processor_preserves_order_and_count():
     extract = BatchProcessor(operation="extract_pii")
     found = extract.process_texts(texts)
     assert len(found) == 3 and all(isinstance(x, list) for x in found)
+
+
+@pytest.mark.parametrize("operation", ["deidentify", "extract_pii"])
+def test_batch_processor_rejects_bare_string(operation):
+    processor = BatchProcessor(operation=operation)
+    with pytest.raises(TypeError):
+        processor.process_texts("Contact Zelda Quintrell today.")
 
 
 def test_batch_processor_accepts_generators():
