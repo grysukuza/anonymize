@@ -14,6 +14,7 @@ from .core import anonymize_medical_text, build_analyzer
 from .openmed_tools import (
     BatchProcessor,
     PiiEntity,
+    PseudonymKeyError,
     deidentify,
     extract_pii,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "deidentify",
     "BatchProcessor",
     "PiiEntity",
+    "PseudonymKeyError",
 ]
 
 __version__ = "0.2.0"

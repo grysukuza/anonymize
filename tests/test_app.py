@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "presidio_service"))
 
+import app as app_module  # noqa: E402
 from app import app  # noqa: E402
 
 SAMPLE = "Patient John Smith, SSN 126-48-6789, phone 555-123-4567, born 01/02/1980."
@@ -42,11 +43,40 @@ def test_index_serves_ui(client):
     assert b"Text Anonymizer" in res.data
 
 
+def test_index_does_not_prefill_credentials(client):
+    body = client.get("/").get_data(as_text=True)
+    assert "anonymize123" not in body
+    assert 'value="admin"' not in body
+
+
 def test_login_rejects_bad_credentials(client):
     res = client.post("/login", json={"username": "admin", "password": "wrong"})
     assert res.status_code == 401
     res = client.post("/login", json={"username": "ghost", "password": "anonymize123"})
     assert res.status_code == 401
+
+
+def test_login_compare_work_ignores_username_existence(client, monkeypatch):
+    """Equal comparison work regardless of whether the username exists."""
+    calls = []
+    real = app_module.hmac.compare_digest
+
+    def spy(a, b):
+        calls.append((len(a), len(b)))
+        return real(a, b)
+
+    monkeypatch.setattr(app_module.hmac, "compare_digest", spy)
+
+    known = client.post("/login", json={"username": "admin", "password": "wrong-pass"})
+    known_calls = list(calls)
+    calls.clear()
+    unknown = client.post("/login", json={"username": "ghost-user", "password": "wrong-pass"})
+
+    assert known.status_code == 401
+    assert unknown.status_code == 401
+    assert known_calls
+    assert calls
+    assert known_calls == calls
 
 
 def test_login_logout_roundtrip(client):
@@ -122,6 +152,33 @@ def test_pii_deidentify_rejects_bad_input(logged_in):
         json={"text": SAMPLE, "method": "shift_dates", "date_shift_days": "many"},
     )
     assert res.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"text": "Admitted 03/14/2021", "method": "shift_dates"},
+        {"text": "Admitted 03/14/2021", "method": "shift_dates", "date_shift_days": 0},
+    ],
+)
+def test_pii_deidentify_shift_dates_requires_nonzero_days(logged_in, payload):
+    res = logged_in.post("/pii/deidentify", json=payload)
+    assert res.status_code == 400
+    assert res.get_json() == {
+        "error": "'date_shift_days' must be a non-zero integer for shift_dates."
+    }
+
+
+def test_pii_deidentify_hash_without_key_returns_503(logged_in, monkeypatch):
+    monkeypatch.delenv("ANONYMIZE_PSEUDONYM_KEY", raising=False)
+    res = logged_in.post(
+        "/pii/deidentify",
+        json={"text": "SSN 219-09-9999 verified.", "method": "hash"},
+    )
+    assert res.status_code == 503
+    assert res.get_json() == {
+        "error": "hash and replace require ANONYMIZE_PSEUDONYM_KEY to be set on the server."
+    }
 
 
 def test_pii_deidentify_shift_dates(logged_in):

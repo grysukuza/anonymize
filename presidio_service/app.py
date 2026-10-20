@@ -1,6 +1,7 @@
 """
 Flask application for the Presidio anonymization microservice.
 """
+import hashlib
 import hmac
 import os
 import re
@@ -13,13 +14,23 @@ from presidio_anonymizer.entities import OperatorConfig
 
 try:
     from anonymize_data.core import get_analyzer, get_anonymizer
-    from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+    from anonymize_data.openmed_tools import (
+        DEIDENTIFY_METHODS,
+        PseudonymKeyError,
+        deidentify,
+        extract_pii,
+    )
 except ModuleNotFoundError:
     # Running from presidio_service/ without the package installed: the
     # repository root (one level up) holds anonymize_data/.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from anonymize_data.core import get_analyzer, get_anonymizer
-    from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+    from anonymize_data.openmed_tools import (
+        DEIDENTIFY_METHODS,
+        PseudonymKeyError,
+        deidentify,
+        extract_pii,
+    )
 
 app = Flask(__name__)
 # Sessions survive restarts only when SESSION_SECRET is set; the random
@@ -33,6 +44,9 @@ VALID_USERS = {
         "ANONYMIZE_PASSWORD", "anonymize123"
     ),
 }
+
+# Same digest work when the username is missing, so login timing does not reveal it.
+_UNKNOWN_USER_SECRET = secrets.token_hex(32)
 
 # Warm the shared engines at import time so the first request doesn't pay the
 # spaCy model load. Both the /anonymize and /pii/* routes use this same pair.
@@ -101,7 +115,12 @@ def login():
     username = str(data.get("username", ""))
     password = str(data.get("password", ""))
     expected = VALID_USERS.get(username)
-    if expected is not None and hmac.compare_digest(expected, password):
+    candidate = expected if expected is not None else _UNKNOWN_USER_SECRET
+    password_ok = hmac.compare_digest(
+        hashlib.sha256(candidate.encode()).digest(),
+        hashlib.sha256(password.encode()).digest(),
+    )
+    if expected is not None and password_ok:
         session["authenticated"] = True
         session["username"] = username
         return jsonify({"status": "ok", "username": username}), 200
@@ -210,16 +229,21 @@ def pii_deidentify():
             "error": f"Invalid method. Choose one of: {', '.join(DEIDENTIFY_METHODS)}"
         }), 400
 
-    shift_days = _parse_int(data.get("date_shift_days"))
-    if shift_days is None:
-        return jsonify({"error": "'date_shift_days' must be an integer."}), 400
+    kwargs = {"method": method, "lang": data.get("lang", "en")}
+    if method == "shift_dates":
+        shift_days = _parse_int(data.get("date_shift_days"))
+        if not shift_days:
+            return jsonify({
+                "error": "'date_shift_days' must be a non-zero integer for shift_dates."
+            }), 400
+        kwargs["date_shift_days"] = shift_days
 
-    result = deidentify(
-        data["text"],
-        method=method,
-        lang=data.get("lang", "en"),
-        date_shift_days=shift_days,
-    )
+    try:
+        result = deidentify(data["text"], **kwargs)
+    except PseudonymKeyError:
+        return jsonify({
+            "error": "hash and replace require ANONYMIZE_PSEUDONYM_KEY to be set on the server."
+        }), 503
     return jsonify({"text": result, "method": method}), 200
 
 

@@ -93,6 +93,10 @@ Response JSON:
 { "text": "[PERSON] born 06/30/1980", "method": "shift_dates" }
 ```
 
+`date_shift_days` is required when `method` is `shift_dates`. It must be a non-zero integer. A missing, invalid, or zero value returns 400.
+
+`hash` and `replace` require the server environment variable `ANONYMIZE_PSEUDONYM_KEY`, a secret of at least 32 characters. If it is unset or too short, the server returns 503.
+
 ## Client Example
 
 ```python
