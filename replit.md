@@ -32,8 +32,8 @@ onto the Presidio backend (no heavy ML models required):
   same-label spans and resolves cross-label overlaps.
 - `deidentify(text, method=)` — four strategies: `mask` (`[LABEL]`),
   `replace` (Faker-backed, format-preserving synthetic data), `hash`
-  (deterministic one-way tokens), `shift_dates` (offset dates by `date_shift_days`,
-  mask the rest).
+  (deterministic one-way tokens), `shift_dates` (offset parsed dates by a required
+  non-zero `date_shift_days` and mask every other span).
 - `BatchProcessor(operation=, method=, batch_size=)` — runs extract/deidentify
   over many documents in memory-bounded chunks.
 

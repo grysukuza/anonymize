@@ -93,6 +93,8 @@ Response JSON:
 { "text": "[PERSON] born 06/30/1980", "method": "shift_dates" }
 ```
 
+`date_shift_days` is required when `method` is `shift_dates`. It must be a non-zero integer. A missing, invalid, or zero value returns 400.
+
 ## Client Example
 
 ```python

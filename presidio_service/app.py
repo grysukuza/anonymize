@@ -219,16 +219,16 @@ def pii_deidentify():
             "error": f"Invalid method. Choose one of: {', '.join(DEIDENTIFY_METHODS)}"
         }), 400
 
-    shift_days = _parse_int(data.get("date_shift_days"))
-    if shift_days is None:
-        return jsonify({"error": "'date_shift_days' must be an integer."}), 400
+    kwargs = {"method": method, "lang": data.get("lang", "en")}
+    if method == "shift_dates":
+        shift_days = _parse_int(data.get("date_shift_days"))
+        if not shift_days:
+            return jsonify({
+                "error": "'date_shift_days' must be a non-zero integer for shift_dates."
+            }), 400
+        kwargs["date_shift_days"] = shift_days
 
-    result = deidentify(
-        data["text"],
-        method=method,
-        lang=data.get("lang", "en"),
-        date_shift_days=shift_days,
-    )
+    result = deidentify(data["text"], **kwargs)
     return jsonify({"text": result, "method": method}), 200
 
 

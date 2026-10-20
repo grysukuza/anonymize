@@ -241,7 +241,7 @@ def deidentify(
     *,
     method: str = "mask",
     lang: str = "en",
-    date_shift_days: int = 0,
+    date_shift_days: int | None = None,
     hash_salt: str = "openmed",
     seed: str = "default",
     entities: Sequence[str] | None = None,
@@ -259,12 +259,17 @@ def deidentify(
         Replace with a one-way cryptographic token ``[LABEL_<hash>]`` —
         irreversible but stable, so equal inputs collapse to equal tokens.
     ``shift_dates``
-        Offset detected dates by ``date_shift_days`` while masking other PII,
-        preserving relative chronology for longitudinal analysis.
+        Offset parsed dates by ``date_shift_days``, which is required and must
+        be a non-zero integer. Mask every other span, including ``DATE_TIME``
+        values that do not parse.
     """
     if method not in DEIDENTIFY_METHODS:
         raise ValueError(
             f"Unknown method {method!r}; expected one of {', '.join(DEIDENTIFY_METHODS)}"
+        )
+    if method == "shift_dates" and not date_shift_days:
+        raise ValueError(
+            "'date_shift_days' must be a non-zero integer for shift_dates"
         )
 
     detected = extract_pii(text, lang=lang, entities=entities)
