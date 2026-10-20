@@ -30,10 +30,12 @@ onto the Presidio backend (no heavy ML models required):
 - `extract_pii(text, lang=, use_smart_merging=)` — returns a list of `PiiEntity`
   (`label`, `text`, `start`, `end`, `score`). Smart merging reassembles fragmented
   same-label spans and resolves cross-label overlaps.
-- `deidentify(text, method=)` — four strategies: `mask` (`[LABEL]`),
-  `replace` (Faker-backed, format-preserving synthetic data), `hash`
-  (deterministic one-way tokens), `shift_dates` (offset parsed dates by a required
-  non-zero `date_shift_days` and mask every other span).
+- `deidentify(text, method=)` has four strategies. `mask` writes `[LABEL]`.
+  `replace` writes Faker synthetic values keyed by `ANONYMIZE_PSEUDONYM_KEY`.
+  `hash` writes a stable HMAC pseudonym under that same key.
+  `shift_dates` offsets parsed dates by a required non-zero `date_shift_days`
+  and masks every other span. `hash` and `replace` read the key from the
+  environment at call time and fail when it is missing or shorter than 32 characters.
 - `BatchProcessor(operation=, method=, batch_size=)` — runs extract/deidentify
   over many documents in memory-bounded chunks.
 

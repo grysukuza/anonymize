@@ -14,6 +14,7 @@ Public API
 - ``extract_pii``      : detect PII and return merged ``PiiEntity`` objects.
 - ``deidentify``       : remove/replace PII via mask | replace | hash | shift_dates.
 - ``BatchProcessor``   : run extract/deidentify over many documents.
+- ``PseudonymKeyError``: ``hash`` or ``replace`` without ``ANONYMIZE_PSEUDONYM_KEY``.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 import hashlib
+import hmac
+import os
 from itertools import islice
 from typing import Iterable, Sequence
 
@@ -37,6 +40,13 @@ except Exception:  # pragma: no cover - optional dependency
 
 # OpenMed exposes friendly de-identification method names; we keep the same set.
 DEIDENTIFY_METHODS: tuple[str, ...] = ("mask", "replace", "hash", "shift_dates")
+
+_PSEUDONYM_KEY_ENV = "ANONYMIZE_PSEUDONYM_KEY"
+_MIN_PSEUDONYM_KEY_CHARS = 32
+
+
+class PseudonymKeyError(RuntimeError):
+    """``hash`` or ``replace`` was called without a usable deployment secret."""
 
 # Date formats we know how to parse for the ``shift_dates`` strategy.
 _DATE_FORMATS: tuple[str, ...] = ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d-%m-%Y", "%B %d, %Y")
@@ -184,9 +194,24 @@ def extract_pii(
     return sorted(found, key=lambda e: e.start)
 
 
-def _hash_token(value: str, label: str, salt: str, length: int = 8) -> str:
-    digest = hashlib.sha256(f"{salt}:{label}:{value}".encode("utf-8")).hexdigest()
-    return f"[{label}_{digest[:length]}]"
+def _pseudonym_key() -> bytes:
+    raw = os.environ.get(_PSEUDONYM_KEY_ENV)
+    if raw is None or len(raw) < _MIN_PSEUDONYM_KEY_CHARS:
+        raise PseudonymKeyError(
+            f"{_PSEUDONYM_KEY_ENV} must be set to a secret of at least "
+            f"{_MIN_PSEUDONYM_KEY_CHARS} characters. Generate one with "
+            'python -c "import secrets; print(secrets.token_hex(32))".'
+        )
+    return raw.encode("utf-8")
+
+
+def _pseudonym_digest(key: bytes, label: str, value: str) -> bytes:
+    return hmac.new(key, f"{label}:{value}".encode("utf-8"), hashlib.sha256).digest()
+
+
+def _hash_token(value: str, label: str, key: bytes) -> str:
+    digest = _pseudonym_digest(key, label, value).hex()[:32]
+    return f"[{label}_{digest}]"
 
 
 def _shift_date_string(raw: str, shift_days: int) -> str | None:
@@ -199,16 +224,16 @@ def _shift_date_string(raw: str, shift_days: int) -> str | None:
     return None
 
 
-def _fake_value(label: str, original: str, faker, seed: str) -> str:
-    """Produce deterministic, locale-aware synthetic data for a label.
+def _fake_value(label: str, original: str, faker, key: bytes) -> str:
+    """Produce synthetic data for a label, stable for one deployment key.
 
-    Seeding per-original-value keeps replacements consistent within and across
-    documents (the same name always maps to the same synthetic name).
+    The HMAC of the label and the original value seeds Faker, so the same
+    key and value always map to the same replacement.
     """
     if faker is None:
         return f"[{label}]"
 
-    faker.seed_instance(int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % (2**32))
+    faker.seed_instance(int.from_bytes(_pseudonym_digest(key, label, original), "big"))
 
     upper = label.upper()
     if upper in {"PERSON", "NAME"}:
@@ -242,8 +267,6 @@ def deidentify(
     method: str = "mask",
     lang: str = "en",
     date_shift_days: int | None = None,
-    hash_salt: str = "openmed",
-    seed: str = "default",
     entities: Sequence[str] | None = None,
 ) -> str:
     """De-identify ``text`` using one of OpenMed's four strategies.
@@ -253,11 +276,14 @@ def deidentify(
     ``mask``
         Replace each span with a ``[LABEL]`` placeholder.
     ``replace``
-        Substitute realistic, format-preserving synthetic data (Faker-backed;
-        falls back to ``[LABEL]`` when Faker is not installed).
+        Substitute realistic synthetic data (Faker-backed). The same
+        ``ANONYMIZE_PSEUDONYM_KEY`` and original value always produce the same
+        replacement. Falls back to ``[LABEL]`` when Faker is not installed.
     ``hash``
-        Replace with a one-way cryptographic token ``[LABEL_<hash>]`` —
-        irreversible but stable, so equal inputs collapse to equal tokens.
+        Replace each span with a stable pseudonym ``[LABEL_<32 hex>]``.
+        The token is an HMAC of the label and the value under
+        ``ANONYMIZE_PSEUDONYM_KEY``. The same key keeps the token stable.
+        The token cannot be reversed without that key.
     ``shift_dates``
         Offset parsed dates by ``date_shift_days``, which is required and must
         be a non-zero integer. Mask every other span, including ``DATE_TIME``
@@ -271,6 +297,7 @@ def deidentify(
         raise ValueError(
             "'date_shift_days' must be a non-zero integer for shift_dates"
         )
+    key = _pseudonym_key() if method in {"hash", "replace"} else None
 
     detected = extract_pii(text, lang=lang, entities=entities)
     if not detected:
@@ -286,9 +313,9 @@ def deidentify(
         if method == "mask":
             replacement = f"[{ent.label}]"
         elif method == "hash":
-            replacement = _hash_token(original, ent.label, hash_salt)
+            replacement = _hash_token(original, ent.label, key)
         elif method == "replace":
-            replacement = _fake_value(ent.label, original, faker, seed=f"{seed}:{original}")
+            replacement = _fake_value(ent.label, original, faker, key)
         else:  # shift_dates
             if ent.label in _DATE_LABELS:
                 shifted = _shift_date_string(original, date_shift_days)

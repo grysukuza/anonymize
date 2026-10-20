@@ -5,7 +5,7 @@ Demonstrates both the original one-shot pipeline and the OpenMed-inspired
 method-based de-identification toolkit.
 """
 from .core import anonymize_medical_text
-from .openmed_tools import deidentify, extract_pii
+from .openmed_tools import PseudonymKeyError, deidentify, extract_pii
 
 DEFAULT_TEXT = (
     "Patient John Smith, born on 01/02/1980, resides at 123 Main St. "
@@ -31,7 +31,10 @@ def main():
     for method in ("mask", "replace", "hash", "shift_dates"):
         kwargs = {"date_shift_days": 180} if method == "shift_dates" else {}
         print(f"\n[{method}]")
-        print(deidentify(DEFAULT_TEXT, method=method, **kwargs))
+        try:
+            print(deidentify(DEFAULT_TEXT, method=method, **kwargs))
+        except PseudonymKeyError:
+            print(f"{method}: skipped, set ANONYMIZE_PSEUDONYM_KEY")
 
 
 if __name__ == "__main__":

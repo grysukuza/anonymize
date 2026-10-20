@@ -14,13 +14,23 @@ from presidio_anonymizer.entities import OperatorConfig
 
 try:
     from anonymize_data.core import get_analyzer, get_anonymizer
-    from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+    from anonymize_data.openmed_tools import (
+        DEIDENTIFY_METHODS,
+        PseudonymKeyError,
+        deidentify,
+        extract_pii,
+    )
 except ModuleNotFoundError:
     # Running from presidio_service/ without the package installed: the
     # repository root (one level up) holds anonymize_data/.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from anonymize_data.core import get_analyzer, get_anonymizer
-    from anonymize_data.openmed_tools import DEIDENTIFY_METHODS, deidentify, extract_pii
+    from anonymize_data.openmed_tools import (
+        DEIDENTIFY_METHODS,
+        PseudonymKeyError,
+        deidentify,
+        extract_pii,
+    )
 
 app = Flask(__name__)
 # Sessions survive restarts only when SESSION_SECRET is set; the random
@@ -228,7 +238,12 @@ def pii_deidentify():
             }), 400
         kwargs["date_shift_days"] = shift_days
 
-    result = deidentify(data["text"], **kwargs)
+    try:
+        result = deidentify(data["text"], **kwargs)
+    except PseudonymKeyError:
+        return jsonify({
+            "error": "hash and replace require ANONYMIZE_PSEUDONYM_KEY to be set on the server."
+        }), 503
     return jsonify({"text": result, "method": method}), 200
 
 
