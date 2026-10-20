@@ -56,6 +56,21 @@ def test_deidentify_shift_dates_preserves_chronology():
     assert "John Smith" not in out  # non-date PII still removed
 
 
+@pytest.mark.parametrize(
+    ("text", "needle"),
+    [
+        ("Mailing ZIP 60614-3302 on file.", "60614"),
+        ("A 93-year-old woman presented.", "93"),
+        ("DOB 14.03.1957 per chart.", "14.03.1957"),
+        ("Discharged on 3 March 2021.", "3 March 2021"),
+    ],
+)
+def test_shift_dates_masks_unparseable_date_time(text, needle):
+    out = deidentify(text, method="shift_dates", date_shift_days=30)
+    assert needle not in out
+    assert "[DATE_TIME]" in out
+
+
 def test_batch_processor_preserves_order_and_count():
     texts = [SAMPLE, "Email jane.doe@example.com", "No PII here at all."]
 
