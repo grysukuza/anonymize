@@ -154,6 +154,21 @@ def test_pii_deidentify_rejects_bad_input(logged_in):
     assert res.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"text": "Admitted 03/14/2021", "method": "shift_dates"},
+        {"text": "Admitted 03/14/2021", "method": "shift_dates", "date_shift_days": 0},
+    ],
+)
+def test_pii_deidentify_shift_dates_requires_nonzero_days(logged_in, payload):
+    res = logged_in.post("/pii/deidentify", json=payload)
+    assert res.status_code == 400
+    assert res.get_json() == {
+        "error": "'date_shift_days' must be a non-zero integer for shift_dates."
+    }
+
+
 def test_pii_deidentify_shift_dates(logged_in):
     res = logged_in.post(
         "/pii/deidentify",
