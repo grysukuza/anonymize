@@ -330,7 +330,13 @@ class BatchProcessor:
 
         The input is consumed lazily in ``batch_size`` chunks, so a generator of
         documents is never materialized all at once.
+
+        A bare ``str`` is a caller bug. Wrapping it as one document guesses
+        intent and changes the result count, so callers that zip inputs with
+        results would misalign silently. Raising fails closed with no output.
         """
+        if isinstance(texts, str):
+            raise TypeError("texts must be an iterable of documents, not str")
         results: list = []
         iterator = iter(texts)
         while chunk := list(islice(iterator, self.batch_size)):
