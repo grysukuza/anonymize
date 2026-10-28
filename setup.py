@@ -2,12 +2,15 @@ from setuptools import setup, find_packages
 
 setup(
     name="anonymize_data",
-    version="0.1.0",
+    version="0.2.0",
     packages=find_packages(),
     extras_require={
         "anonymization": [
             "presidio-analyzer",
             "presidio-anonymizer",
+        ],
+        "synthetic": [
+            "faker>=30.0.0",
         ],
     },
     entry_points={
