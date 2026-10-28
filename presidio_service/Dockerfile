@@ -23,5 +23,7 @@ COPY presidio_service/templates/ ./templates/
 # Expose port
 EXPOSE 5000
 
-# Run the Gunicorn server
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "app:app"]
+# --preload imports the app once before forking, so workers share the spaCy
+# model and the session signing key (otherwise cookies from one worker are
+# rejected by the other unless SESSION_SECRET is set).
+CMD ["gunicorn", "--preload", "-w", "2", "-b", "0.0.0.0:5000", "app:app"]

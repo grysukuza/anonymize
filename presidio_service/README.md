@@ -27,8 +27,12 @@ python app.py
 
 In production (with Gunicorn):
 ```bash
-gunicorn -w 2 -b 0.0.0.0:5000 app:app
+gunicorn --preload -w 2 -b 0.0.0.0:5000 app:app
 ```
+
+Set `SESSION_SECRET` to a fixed random value so logins survive restarts; without
+it a random key is generated at startup (`--preload` keeps it shared across
+workers). Override the demo login with `ANONYMIZE_USERNAME` / `ANONYMIZE_PASSWORD`.
 
 ## Web UI
 
