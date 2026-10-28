@@ -39,7 +39,10 @@ except Exception:  # pragma: no cover - optional dependency
 DEIDENTIFY_METHODS: tuple[str, ...] = ("mask", "replace", "hash", "shift_dates")
 
 # Date formats we know how to parse for the ``shift_dates`` strategy.
-_DATE_FORMATS: tuple[str, ...] = ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d-%m-%Y", "%B %d, %Y")
+_DATE_FORMATS: tuple[str, ...] = (
+    "%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d-%m-%Y",
+    "%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y",
+)
 
 # Presidio entity types that represent dates (used by ``shift_dates``).
 _DATE_LABELS: frozenset[str] = frozenset({"DATE_TIME", "DATE"})
@@ -108,20 +111,34 @@ def _smart_merge(entities: list[PiiEntity], text: str) -> list[PiiEntity]:
     return merged
 
 
-def _resolve_overlaps(entities: list[PiiEntity]) -> list[PiiEntity]:
-    """Drop overlapping spans, keeping the most trustworthy one per region.
+def _resolve_overlaps(entities: list[PiiEntity], text: str) -> list[PiiEntity]:
+    """Collapse overlapping spans into one entity covering their union.
 
     Presidio recognizers routinely emit overlapping detections of *different*
     labels (e.g. a low-confidence ``URL`` over a high-confidence ``EMAIL``).
-    Span-replacement requires disjoint regions, so we greedily keep the highest
-    score (tie-break: longest span) and discard anything that overlaps it.
+    Span-replacement requires disjoint regions, but dropping a losing span
+    would leak whatever part of it the winner doesn't cover, so each cluster of
+    overlapping spans becomes a single span over all of them, labelled by its
+    most trustworthy member (highest score, tie-break: longest span).
     """
-    accepted: list[PiiEntity] = []
-    for ent in sorted(entities, key=lambda e: (e.score, e.end - e.start), reverse=True):
-        if any(ent.start < kept.end and kept.start < ent.end for kept in accepted):
-            continue
-        accepted.append(ent)
-    return sorted(accepted, key=lambda e: e.start)
+    resolved: list[PiiEntity] = []
+    cluster: list[PiiEntity] = []
+
+    def flush() -> None:
+        if not cluster:
+            return
+        best = max(cluster, key=lambda e: (e.score, e.end - e.start))
+        start = min(e.start for e in cluster)
+        end = max(e.end for e in cluster)
+        resolved.append(PiiEntity(best.label, text[start:end], start, end, best.score))
+        cluster.clear()
+
+    for ent in sorted(entities, key=lambda e: (e.start, e.end)):
+        if cluster and ent.start >= max(e.end for e in cluster):
+            flush()
+        cluster.append(ent)
+    flush()
+    return resolved
 
 
 def extract_pii(
@@ -166,7 +183,7 @@ def extract_pii(
     ]
 
     if use_smart_merging:
-        found = _resolve_overlaps(found)
+        found = _resolve_overlaps(found, text)
         found = _smart_merge(found, text)
 
     return sorted(found, key=lambda e: e.start)
@@ -177,14 +194,15 @@ def _hash_token(value: str, label: str, salt: str, length: int = 8) -> str:
     return f"[{label}_{digest[:length]}]"
 
 
-def _shift_date_string(raw: str, shift_days: int) -> str:
+def _shift_date_string(raw: str, shift_days: int) -> str | None:
+    """Shift a date by ``shift_days``, or return None when its format is unknown."""
     for fmt in _DATE_FORMATS:
         try:
             parsed = datetime.strptime(raw.strip(), fmt)
         except ValueError:
             continue
         return raw.replace(raw.strip(), (parsed + timedelta(days=shift_days)).strftime(fmt))
-    return raw
+    return None
 
 
 def _fake_value(label: str, original: str, faker, seed: str) -> str:
@@ -273,10 +291,13 @@ def deidentify(
         elif method == "replace":
             replacement = _fake_value(ent.label, original, faker, seed=f"{seed}:{original}")
         else:  # shift_dates
-            if ent.label in _DATE_LABELS:
-                replacement = _shift_date_string(original, date_shift_days)
-            else:
-                replacement = f"[{ent.label}]"
+            shifted = (
+                _shift_date_string(original, date_shift_days)
+                if ent.label in _DATE_LABELS
+                else None
+            )
+            # A date we can't parse must still not leak, so mask it.
+            replacement = shifted if shifted is not None else f"[{ent.label}]"
 
         out = out[: ent.start] + replacement + out[ent.end :]
 

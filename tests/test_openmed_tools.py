@@ -68,6 +68,30 @@ def test_batch_processor_preserves_order_and_count():
     assert len(found) == 3 and all(isinstance(x, list) for x in found)
 
 
+def test_resolve_overlaps_keeps_union_of_regions():
+    from anonymize_data.openmed_tools import _resolve_overlaps
+
+    text = "Patient John Smith"
+    ents = [
+        PiiEntity("PERSON", "John Smith", 8, 18, 0.85),
+        PiiEntity("OTHER", "John", 8, 12, 0.95),
+    ]
+    [merged] = _resolve_overlaps(ents, text)
+    # The higher-scoring span names the label, but coverage must not shrink.
+    assert (merged.start, merged.end, merged.text) == (8, 18, "John Smith")
+    assert merged.label == "OTHER"
+
+
+def test_shift_dates_masks_unparseable_dates():
+    out = deidentify("Born on the 2nd of January 1980.", method="shift_dates", date_shift_days=10)
+    assert "1980" not in out
+
+
+def test_shift_dates_handles_month_name_formats():
+    out = deidentify("Seen on 2 January 1980.", method="shift_dates", date_shift_days=10)
+    assert "12 January 1980" in out
+
+
 def test_batch_processor_accepts_generators():
     masked = BatchProcessor(operation="deidentify", method="mask", batch_size=2).process_texts(
         t for t in [SAMPLE, "No PII here at all."]
