@@ -293,7 +293,11 @@ def deidentify(
         raise ValueError(
             f"Unknown method {method!r}; expected one of {', '.join(DEIDENTIFY_METHODS)}"
         )
-    if method == "shift_dates" and not date_shift_days:
+    if method == "shift_dates" and (
+        isinstance(date_shift_days, bool)
+        or not isinstance(date_shift_days, int)
+        or date_shift_days == 0
+    ):
         raise ValueError(
             "'date_shift_days' must be a non-zero integer for shift_dates"
         )

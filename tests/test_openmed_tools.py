@@ -127,7 +127,7 @@ def test_shift_dates_masks_unparseable_date_time(text, needle):
     assert "[DATE_TIME]" in out
 
 
-@pytest.mark.parametrize("days", [None, 0])
+@pytest.mark.parametrize("days", [None, 0, 0.5, True])
 def test_shift_dates_requires_nonzero_days(days):
     kwargs = {} if days is None else {"date_shift_days": days}
     with pytest.raises(ValueError, match="date_shift_days"):

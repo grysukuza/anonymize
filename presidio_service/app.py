@@ -231,8 +231,12 @@ def pii_deidentify():
 
     kwargs = {"method": method, "lang": data.get("lang", "en")}
     if method == "shift_dates":
-        shift_days = _parse_int(data.get("date_shift_days"))
-        if not shift_days:
+        shift_days = data.get("date_shift_days")
+        if (
+            isinstance(shift_days, bool)
+            or not isinstance(shift_days, int)
+            or shift_days == 0
+        ):
             return jsonify({
                 "error": "'date_shift_days' must be a non-zero integer for shift_dates."
             }), 400

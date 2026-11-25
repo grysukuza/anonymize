@@ -159,6 +159,8 @@ def test_pii_deidentify_rejects_bad_input(logged_in):
     [
         {"text": "Admitted 03/14/2021", "method": "shift_dates"},
         {"text": "Admitted 03/14/2021", "method": "shift_dates", "date_shift_days": 0},
+        {"text": "Admitted 03/14/2021", "method": "shift_dates", "date_shift_days": 0.5},
+        {"text": "Admitted 03/14/2021", "method": "shift_dates", "date_shift_days": True},
     ],
 )
 def test_pii_deidentify_shift_dates_requires_nonzero_days(logged_in, payload):
