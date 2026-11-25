@@ -104,3 +104,64 @@ def test_anonymize_medical_text_uses_specific_ssn_operator():
     assert "126-48-6789" not in out
     # US_SSN must hit its dedicated operator, not fall through to <REDACTED>.
     assert "XXX-XX-XXXX" in out
+
+
+def test_hash_tokens_are_keyed_and_128_bit():
+    from anonymize_data.openmed_tools import _hash_token
+
+    # These two SSNs collided under the old 32-bit public-salt scheme.
+    a = _hash_token("126-04-6628", "US_SSN", b"k")
+    b = _hash_token("126-10-6161", "US_SSN", b"k")
+    assert a != b
+    assert len(a) == len("[US_SSN_]") + 32
+    # A different key gives a different token, so tokens can't be precomputed.
+    assert _hash_token("126-04-6628", "US_SSN", b"other") != a
+
+
+def test_hash_key_argument_controls_tokens():
+    one = deidentify(SAMPLE, method="hash", hash_key="alpha")
+    assert one == deidentify(SAMPLE, method="hash", hash_key="alpha")
+    assert one != deidentify(SAMPLE, method="hash", hash_key="beta")
+
+
+def test_shift_dates_without_offset_masks_dates():
+    out = deidentify("Born 01/02/1980, John Smith.", method="shift_dates")
+    assert "01/02/1980" not in out
+    assert "[DATE_TIME]" in out
+
+
+def test_adjacent_dates_stay_independently_shiftable():
+    out = deidentify("Visits:\n01/02/1980\n01/12/1980", method="shift_dates", date_shift_days=1)
+    assert "01/03/1980" in out and "01/13/1980" in out
+
+
+def test_shift_dates_masks_on_overflow():
+    out = deidentify("Expires 12/31/9999.", method="shift_dates", date_shift_days=1)
+    assert "9999" not in out
+
+
+def test_replace_preserves_date_and_card_formats():
+    import re
+
+    out = deidentify("Seen 2024-03-15 by John Smith", method="replace")
+    assert re.search(r"\d{4}-\d{2}-\d{2}", out) and "2024-03-15" not in out
+
+    from anonymize_data.openmed_tools import _preserve_digit_layout
+
+    assert _preserve_digit_layout("4111-1111-1111-1111", "5500005555555559") == "5500-0055-5555-5559"
+
+
+def test_fake_value_is_deterministic_across_threads():
+    from concurrent.futures import ThreadPoolExecutor
+
+    expected = deidentify(SAMPLE, method="replace", seed="t")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: deidentify(SAMPLE, method="replace", seed="t"), range(32)))
+    assert all(r == expected for r in results)
+
+
+def test_iter_texts_streams_results():
+    processor = BatchProcessor(operation="deidentify", method="mask", batch_size=1)
+    stream = processor.iter_texts(t for t in [SAMPLE, "No PII here at all."])
+    assert "[PERSON]" in next(stream)
+    assert next(stream) == "No PII here at all."

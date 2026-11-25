@@ -51,12 +51,20 @@ def _get_json() -> dict | None:
 
 
 def _parse_int(value, default: int = 0) -> int | None:
-    """Coerce a JSON value to int, returning None when it cannot be."""
+    """Coerce a JSON value to int, returning None when it isn't a whole number.
+
+    bool is rejected even though it subclasses int, and floats only pass when
+    integral: int(0.9) would silently apply 0 instead of what was sent.
+    """
     if value is None:
         return default
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -101,7 +109,10 @@ def login():
     username = str(data.get("username", ""))
     password = str(data.get("password", ""))
     expected = VALID_USERS.get(username)
-    if expected is not None and hmac.compare_digest(expected, password):
+    # compare_digest rejects non-ASCII str, so compare the UTF-8 bytes.
+    if expected is not None and hmac.compare_digest(
+        expected.encode("utf-8"), password.encode("utf-8")
+    ):
         session["authenticated"] = True
         session["username"] = username
         return jsonify({"status": "ok", "username": username}), 200

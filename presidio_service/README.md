@@ -33,6 +33,9 @@ gunicorn --preload -w 2 -b 0.0.0.0:5000 app:app
 Set `SESSION_SECRET` to a fixed random value so logins survive restarts; without
 it a random key is generated at startup (`--preload` keeps it shared across
 workers). Override the demo login with `ANONYMIZE_USERNAME` / `ANONYMIZE_PASSWORD`.
+Set `ANONYMIZE_HASH_KEY` to a secret value so `hash`-method tokens stay the same
+across restarts (needed to join records on them); without it a random key is
+used per process, so tokens can't be reproduced by anyone outside it.
 
 ## Web UI
 

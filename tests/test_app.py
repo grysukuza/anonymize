@@ -131,3 +131,23 @@ def test_pii_deidentify_shift_dates(logged_in):
     )
     assert res.status_code == 200
     assert "01/12/1980" in res.get_json()["text"]
+
+
+@pytest.mark.parametrize("delta", [0.9, True, "1e999", 1e308 * 10])
+def test_anonymize_rejects_non_integer_deltas(logged_in, delta):
+    res = logged_in.post(
+        "/anonymize", json={"text": "Dosage 10 mg", "adjust_numbers": True, "number_delta": delta}
+    )
+    assert res.status_code == 400
+
+
+def test_integral_float_delta_is_accepted(logged_in):
+    res = logged_in.post(
+        "/anonymize", json={"text": "Dosage 10 mg", "adjust_numbers": True, "number_delta": 5.0}
+    )
+    assert res.status_code == 200 and "15" in res.get_json()["text"]
+
+
+def test_login_with_non_ascii_password_does_not_crash(client):
+    res = client.post("/login", json={"username": "admin", "password": "pässword"})
+    assert res.status_code == 401
